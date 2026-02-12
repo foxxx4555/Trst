@@ -6,9 +6,9 @@ import AppLayout from '@/components/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, MapPin, Phone, MessageCircle, Info, X, ChevronLeft, Truck, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, MapPin, Phone, MessageCircle, Info, X, ChevronLeft, Truck, CheckCircle2, Package, Calendar, Weight, DollarSign, Box } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
 export default function DriverLoads() {
@@ -16,70 +16,67 @@ export default function DriverLoads() {
   const [loads, setLoads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLoad, setSelectedLoad] = useState<any>(null);
-  const [otherLoads, setOtherLoads] = useState<any[]>([]);
   const [showFeedback, setShowFeedback] = useState(false);
   const [pendingContact, setPendingContact] = useState(false);
+  const [isAccepting, setIsAccepting] = useState(false);
 
   const fetchLoads = async () => {
     const data = await api.getAvailableLoads();
-    setLoads(data as any[] || []);
+    setLoads((data as any[])?.filter(l => l.owner_id !== userProfile?.id) || []);
     setLoading(false);
   };
 
   useEffect(() => {
     fetchLoads();
-    const channel = supabase.channel('loads-realtime').on('postgres_changes', { event: '*', schema: 'public', table: 'loads' }, () => fetchLoads()).subscribe();
+    const channel = supabase.channel('loads-live').on('postgres_changes', { event: '*', schema: 'public', table: 'loads' }, () => fetchLoads()).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [userProfile]);
 
-  // مراقبة عودة المستخدم للتطبيق لإظهار تقرير الاتصال
   useEffect(() => {
     const handleFocus = () => {
       if (pendingContact) {
         setPendingContact(false);
-        setTimeout(() => setShowFeedback(true), 500); // إظهار التقرير بعد نص ثانية من الرجوع
+        setTimeout(() => setShowFeedback(true), 600);
       }
     };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, [pendingContact]);
 
-  const openDetails = async (load: any) => {
-    setSelectedLoad(load);
-    try {
-      const others = await api.getOtherLoadsByOwner(load.owner_id, load.id);
-      setOtherLoads(others || []);
-    } catch (e) {
-      setOtherLoads([]);
-    }
-  };
-
   const handleContact = (type: 'tel' | 'wa') => {
     setPendingContact(true);
     const phone = selectedLoad?.profiles?.phone || '';
-    if (type === 'tel') {
-      window.location.href = `tel:${phone}`;
-    } else {
-      window.open(`https://wa.me/${phone.replace(/^0/, '966')}`, '_blank');
+    if (type === 'tel') window.location.href = `tel:${phone}`;
+    else window.open(`https://wa.me/${phone.replace(/^0/, '966')}`, '_blank');
+  };
+
+  // وظيفة نقل الشحنة لسائق (قبول الاتفاق)
+  const handleConfirmAgreement = async () => {
+    if (!selectedLoad || !userProfile?.id) return;
+    setIsAccepting(true);
+    try {
+      await api.acceptLoad(selectedLoad.id, userProfile.id);
+      toast.success("تم نقل الشحنة إلى شاحنتك بنجاح!");
+      setShowFeedback(false);
+      setSelectedLoad(null);
+    } catch (err: any) {
+      toast.error("حدث خطأ: " + err.message);
+    } finally {
+      setIsAccepting(false);
     }
   };
 
   return (
     <AppLayout>
       <div className="space-y-4 pb-20">
-        <div className="flex items-center justify-between">
-            <h2 className="text-xl font-black text-slate-800">الشحنات المتاحة</h2>
-            <Badge className="bg-green-50 text-green-600 border-0 animate-pulse">تحديث مباشر</Badge>
-        </div>
+        <h2 className="text-xl font-black text-slate-800">الحمولات المتاحة</h2>
         
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" size={40} /></div>
-        ) : loads.length === 0 ? (
-          <div className="py-20 text-center border-2 border-dashed rounded-3xl text-muted-foreground">لا توجد شحنات متاحة حالياً</div>
         ) : (
           <div className="grid gap-3">
             {loads.map(load => (
-              <Card key={load.id} className="rounded-3xl border-none shadow-sm active:scale-[0.98] transition-all cursor-pointer bg-white" onClick={() => openDetails(load)}>
+              <Card key={load.id} className="rounded-3xl border-none shadow-sm active:scale-[0.98] transition-all cursor-pointer bg-white" onClick={() => setSelectedLoad(load)}>
                 <CardContent className="p-5 flex justify-between items-center">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 font-black text-slate-700 text-lg">
@@ -87,121 +84,115 @@ export default function DriverLoads() {
                       {load.origin} <ChevronLeft size={16} className="text-slate-300" /> {load.destination}
                     </div>
                     <div className="flex gap-2">
-                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-0 text-[10px]">{load.package_type || 'بضاعة عامة'}</Badge>
-                        <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-0 text-[10px]">{load.weight} طن</Badge>
+                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-0 text-[10px] font-bold">{load.weight} طن</Badge>
+                        <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-0 text-[10px] font-bold">{load.price} ر.س</Badge>
                     </div>
                   </div>
-                  <div className="text-left">
-                    <p className="text-xl font-black text-primary">{load.price} <span className="text-[10px]">ر.س</span></p>
-                    <p className="text-[10px] text-slate-400 font-bold">عرض التفاصيل</p>
-                  </div>
+                  <ChevronLeft className="text-slate-300" />
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
 
-        {/* --- نافذة تفاصيل الشحنة (Bottom Sheet) --- */}
+        {/* --- نافذة تفاصيل الشحنة (تصميم أصغر وأشيك) --- */}
         <Sheet open={!!selectedLoad} onOpenChange={() => setSelectedLoad(null)}>
-          <SheetContent side="bottom" className="h-[92vh] rounded-t-[3.5rem] p-0 overflow-hidden border-none shadow-2xl">
-            <div className="h-full flex flex-col bg-white">
-              {/* بار السحب العلوي */}
-              <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mt-3 mb-2"></div>
+          <SheetContent side="bottom" className="h-[85vh] rounded-t-[3rem] p-0 overflow-hidden border-none shadow-2xl">
+            <div className="h-full flex flex-col bg-slate-50">
+              <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mt-4 mb-2"></div>
               
-              <div className="p-6 pb-2 flex justify-between items-center">
-                <h3 className="text-2xl font-black text-slate-800">تفاصيل الحمولة</h3>
+              <div className="px-6 py-4 flex justify-between items-center bg-white border-b">
+                <h3 className="text-xl font-black text-slate-800">تفاصيل الحمولة</h3>
                 <Button variant="ghost" size="icon" onClick={() => setSelectedLoad(null)} className="rounded-full bg-slate-100"><X size={20}/></Button>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-6 space-y-6 pb-40">
-                {/* مسار الرحلة */}
-                <div className="bg-slate-50 p-6 rounded-[2.5rem] relative overflow-hidden">
-                    <div className="flex justify-between items-center relative z-10">
-                        <div className="text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-primary text-white flex items-center justify-center mx-auto mb-2 shadow-lg shadow-primary/30"><MapPin size={24} /></div>
+              <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+                {/* كرت المسار */}
+                <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100">
+                    <div className="flex justify-between items-center">
+                        <div className="text-center flex-1">
+                            <p className="text-[10px] font-bold text-slate-400 mb-1">التحميل</p>
                             <p className="font-black text-slate-800">{selectedLoad?.origin}</p>
                         </div>
-                        <div className="flex-1 px-4 flex flex-col items-center">
-                            <span className="text-xs font-bold text-slate-400 mb-1">{selectedLoad?.distance || '---'} كم</span>
-                            <div className="w-full border-t-2 border-dashed border-slate-300"></div>
-                            <Truck className="text-primary mt-1" size={20} />
+                        <div className="px-4 flex flex-col items-center flex-1">
+                            <span className="text-[10px] font-black text-primary mb-1">{selectedLoad?.distance || '---'} كم</span>
+                            <div className="w-full border-t-2 border-dashed border-slate-200"></div>
+                            <Truck className="text-primary mt-1" size={18} />
                         </div>
-                        <div className="text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-slate-800 text-white flex items-center justify-center mx-auto mb-2 shadow-lg shadow-slate-800/30"><MapPin size={24} /></div>
+                        <div className="text-center flex-1">
+                            <p className="text-[10px] font-bold text-slate-400 mb-1">التفريغ</p>
                             <p className="font-black text-slate-800">{selectedLoad?.destination}</p>
                         </div>
                     </div>
                 </div>
 
-                {/* الوصف */}
-                <div className="space-y-2">
-                    <div className="flex items-center gap-2 text-slate-800 font-black"><Info size={20} className="text-primary"/> وصف الحمولة</div>
-                    <div className="bg-slate-50 p-5 rounded-[2rem] text-sm leading-relaxed text-slate-600 font-medium">
-                        {selectedLoad?.description || 'لا توجد تفاصيل إضافية مكتوبة لهذه الشحنة.'}
+                {/* شبكة البيانات (كل المعلومات هنا) */}
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center gap-3">
+                        <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600"><DollarSign size={20}/></div>
+                        <div><p className="text-[9px] font-bold text-slate-400">السعر</p><p className="font-black text-sm">{selectedLoad?.price} ر.س</p></div>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center gap-3">
+                        <div className="p-2 bg-blue-50 rounded-xl text-blue-600"><Weight size={20}/></div>
+                        <div><p className="text-[9px] font-bold text-slate-400">الوزن</p><p className="font-black text-sm">{selectedLoad?.weight} طن</p></div>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center gap-3">
+                        <div className="p-2 bg-orange-50 rounded-xl text-orange-600"><Calendar size={20}/></div>
+                        <div><p className="text-[9px] font-bold text-slate-400">تاريخ التحميل</p><p className="font-black text-sm">{selectedLoad?.pickup_date || 'اليوم'}</p></div>
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl border border-slate-100 flex items-center gap-3">
+                        <div className="p-2 bg-purple-50 rounded-xl text-purple-600"><Box size={20}/></div>
+                        <div><p className="text-[9px] font-bold text-slate-400">نوع البضاعة</p><p className="font-black text-sm truncate w-20">{selectedLoad?.package_type || 'عامة'}</p></div>
                     </div>
                 </div>
 
-                {/* بضائع أخرى */}
-                {otherLoads.length > 0 && (
-                    <div className="space-y-3">
-                        <p className="font-black text-slate-800">بضائع أخرى لهذا العميل</p>
-                        <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                            {otherLoads.map(other => (
-                                <div key={other.id} className="min-w-[180px] p-4 rounded-[2rem] bg-white border-2 border-slate-50 shadow-sm space-y-2">
-                                    <p className="font-bold text-xs text-slate-700 truncate">{other.origin} ← {other.destination}</p>
-                                    <p className="text-primary font-black text-lg">{other.price} <span className="text-[10px]">ر.س</span></p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                {/* الوصف */}
+                <div className="bg-white p-5 rounded-[2rem] border border-slate-100 space-y-2">
+                    <div className="flex items-center gap-2 text-slate-800 font-black text-sm"><Info size={18} className="text-primary"/> وصف إضافي</div>
+                    <p className="text-sm text-slate-600 font-medium leading-relaxed">{selectedLoad?.description || 'لا يوجد وصف متاح.'}</p>
+                </div>
 
-                {/* تحذير */}
-                <div className="p-5 rounded-[2rem] bg-amber-50 border border-amber-100 flex gap-4">
-                    <AlertTriangle className="text-amber-500 shrink-0" size={24} />
-                    <p className="text-xs text-amber-900 font-medium leading-relaxed">
-                        نحن نوصلك بصاحب البضاعة مباشرة. الاتفاق المالي والعمولة مسؤوليتك الشخصية تماماً.
-                    </p>
+                {/* ملاحظة الأمان */}
+                <div className="p-4 rounded-2xl bg-amber-50 text-[10px] text-amber-700 font-bold text-center border border-amber-100">
+                    ⚠️ نحن نوصلك بصاحب الطلب مباشرة. الاتفاق مسؤوليتك الشخصية.
                 </div>
               </div>
 
-              {/* أزرار الاتصال الثابتة */}
-              <div className="absolute bottom-0 left-0 w-full p-6 bg-white/80 backdrop-blur-md border-t border-slate-100 flex gap-4">
-                <Button className="flex-1 h-16 rounded-[1.5rem] bg-[#25D366] hover:bg-[#128C7E] text-white text-xl font-black gap-3 shadow-xl shadow-green-200" onClick={() => handleContact('wa')}>
-                  <MessageCircle size={24} strokeWidth={3} /> واتساب
+              {/* أزرار الاتصال */}
+              <div className="p-6 bg-white border-t flex gap-3 pb-10">
+                <Button className="flex-1 h-14 rounded-2xl bg-[#25D366] hover:bg-[#128C7E] text-white text-lg font-black gap-2 shadow-lg shadow-green-100" onClick={() => handleContact('wa')}>
+                  <MessageCircle size={22} /> واتساب
                 </Button>
-                <Button className="flex-1 h-16 rounded-[1.5rem] bg-[#F59E0B] hover:bg-[#D97706] text-white text-xl font-black gap-3 shadow-xl shadow-orange-200" onClick={() => handleContact('tel')}>
-                  <Phone size={24} strokeWidth={3} /> اتصال
+                <Button className="flex-1 h-14 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white text-lg font-black gap-2 shadow-lg shadow-orange-100" onClick={() => handleContact('tel')}>
+                  <Phone size={22} /> اتصال
                 </Button>
               </div>
             </div>
           </SheetContent>
         </Sheet>
 
-        {/* --- واجهة تقرير الاتصال (المنبثقة عند العودة) --- */}
+        {/* --- نافذة تقرير الاتصال (الشكل الجديد) --- */}
         <Dialog open={showFeedback} onOpenChange={setShowFeedback}>
-            <DialogContent className="sm:max-w-md rounded-[3rem] p-0 overflow-hidden border-none shadow-2xl">
-                <div className="bg-gradient-to-br from-orange-400 to-orange-600 p-10 text-center text-white">
-                    <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
-                        <Truck size={40} />
-                    </div>
-                    <h2 className="text-2xl font-black">تقرير الاتصال</h2>
-                    <p className="opacity-80 text-sm mt-1">نسعى دائماً لتطوير تجربتك</p>
+            <DialogContent className="sm:max-w-md rounded-[3rem] p-0 overflow-hidden border-none">
+                <div className="bg-slate-900 p-8 text-center text-white relative">
+                    <Truck className="mx-auto mb-2 text-primary" size={40} />
+                    <h2 className="text-xl font-black">تقرير الاتصال</h2>
+                    <Button variant="ghost" onClick={() => setShowFeedback(false)} className="absolute top-4 right-4 text-white/50 hover:text-white"><X size={20}/></Button>
                 </div>
-                <div className="p-8 space-y-6">
+                <div className="p-6 space-y-6 bg-white">
                     <p className="text-center font-black text-slate-700 text-lg">هل اتفقت مع صاحب الحمولة؟</p>
                     <div className="grid gap-3">
-                        <Button className="h-16 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-lg gap-3" onClick={() => {setShowFeedback(false); toast.success("رائع! رحلة سعيدة وموفقة");}}>
-                           <CheckCircle2 size={24} /> نعم، تم الاتفاق
+                        <Button 
+                            className="h-16 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-lg shadow-lg shadow-emerald-100 gap-3" 
+                            onClick={handleConfirmAgreement}
+                            disabled={isAccepting}
+                        >
+                           {isAccepting ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={24} /> نعم، اتفقت</>}
                         </Button>
                         
-                        <div className="grid grid-cols-1 gap-2 mt-2">
-                           {[
-                               "لا، الحمولة حُملت بالفعل",
-                               "لا، لم يتم الرد على الاتصال",
-                               "لا، السعر لم يناسبني"
-                           ].map((reason, i) => (
-                               <Button key={i} variant="ghost" className="h-14 rounded-2xl bg-slate-50 text-slate-600 hover:bg-slate-100 font-bold text-sm" onClick={() => setShowFeedback(false)}>
+                        <div className="grid grid-cols-1 gap-2">
+                           {["لا، لم نتفق", "لم يرد علي", "أسباب أخرى"].map((reason, i) => (
+                               <Button key={i} variant="ghost" className="h-12 rounded-xl text-slate-400 font-bold" onClick={() => setShowFeedback(false)}>
                                    {reason}
                                </Button>
                            ))}

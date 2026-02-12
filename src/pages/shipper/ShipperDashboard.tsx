@@ -25,7 +25,6 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ShipperDashboard() {
-  const { t } = useTranslation();
   const { userProfile } = useAuth();
   const navigate = useNavigate();
   
@@ -37,11 +36,8 @@ export default function ShipperDashboard() {
   const fetchDashboardData = async () => {
     if (!userProfile?.id) return;
     try {
-      // جلب الإحصائيات
       const s = await api.getShipperStats(userProfile.id);
       setStats(s);
-
-      // جلب شحناتي الأخيرة
       const data = await api.getUserLoads(userProfile.id);
       setMyLoads(data as any[] || []);
     } catch (err) {
@@ -54,9 +50,8 @@ export default function ShipperDashboard() {
   useEffect(() => {
     fetchDashboardData();
 
-    // التحديث الفوري: أي شحنة تتضاف أو تتمسح أو يقبلها سواق، القائمة تتحدث فوراً
     const channel = supabase
-      .channel('shipper-realtime')
+      .channel('shipper-realtime-loads')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'loads' }, () => {
         fetchDashboardData();
       })
@@ -69,9 +64,9 @@ export default function ShipperDashboard() {
     setIsDeleting(id);
     try {
       await api.deleteLoad(id);
-      toast.success("تم حذف طلب الشحنة بنجاح");
+      toast.success("تم حذف الشحنة بنجاح");
     } catch (err: any) {
-      toast.error("عذراً، لا يمكن حذف الشحنة الآن");
+      toast.error("عذراً، فشل الحذف");
     } finally {
       setIsDeleting(null);
     }
@@ -80,58 +75,42 @@ export default function ShipperDashboard() {
   return (
     <AppLayout>
       <div className="space-y-6 pb-10">
-        <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-black text-slate-800">مرحباً بك، {userProfile?.full_name}</h1>
-        </div>
+        <h1 className="text-2xl font-black text-slate-800">مرحباً بك، {userProfile?.full_name}</h1>
 
-        {/* ملخص النشاط */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <StatCard title="شحنات نشطة" value={stats.activeLoads} icon={<Package size={24} />} color="primary" />
           <StatCard title="رحلات مكتملة" value={stats.completedTrips} icon={<CheckCircle size={24} />} color="accent" />
         </div>
 
-        {/* زر النشر الكبير - شكل شيك جداً */}
-        <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
-            <Card 
-            className="cursor-pointer border-none shadow-xl shadow-primary/10 bg-gradient-to-r from-primary to-blue-700 text-white overflow-hidden relative group"
-            onClick={() => navigate('/shipper/post')}
-            >
-                <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:rotate-12 transition-transform">
-                    <Package size={120} />
+        {/* زر نشر الشحنة بتصميم مميز */}
+        <Card 
+          className="cursor-pointer border-none shadow-xl shadow-primary/10 bg-gradient-to-r from-primary to-blue-700 text-white overflow-hidden relative group"
+          onClick={() => navigate('/shipper/post')}
+        >
+            <CardContent className="flex items-center gap-6 p-8 relative z-10">
+                <div className="p-4 rounded-3xl bg-white/20 backdrop-blur-md group-hover:rotate-90 transition-transform">
+                    <Plus size={36} strokeWidth={3} />
                 </div>
-                <CardContent className="flex items-center gap-6 p-8 relative z-10">
-                    <div className="p-4 rounded-3xl bg-white/20 backdrop-blur-md">
-                        <Plus size={36} strokeWidth={3} />
-                    </div>
-                    <div>
-                        <p className="font-black text-2xl">انشر شحنة جديدة</p>
-                        <p className="text-white/80 font-medium mt-1">ابدأ الآن وابحث عن أفضل السائقين لبضاعتك</p>
-                    </div>
-                </CardContent>
-            </Card>
-        </motion.div>
+                <div>
+                    <p className="font-black text-2xl">انشر شحنة جديدة</p>
+                    <p className="text-white/80 font-medium mt-1">اضغط هنا لإضافة بضاعتك الآن</p>
+                </div>
+            </CardContent>
+        </Card>
 
-        {/* قائمة الشحنات بتصميم الكروت الأنيقة */}
-        <div className="space-y-4">
+        {/* قائمة شحناتي بالتحديث الفوري */}
+        <div className="space-y-4 pt-4">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-              <Clock className="text-primary" size={22} />
-              شحناتي الأخيرة
+              <Clock className="text-primary" size={22} /> شحناتي الأخيرة
             </h2>
-            <div className="flex items-center gap-1.5 text-[10px] text-green-600 font-bold bg-green-50 px-2 py-1 rounded-full border border-green-100">
-                <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                </span>
-                مباشر
-            </div>
+            <Badge variant="outline" className="text-green-600 bg-green-50 animate-pulse">مباشر</Badge>
           </div>
 
           {loading ? (
             <div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary" size={40} /></div>
           ) : myLoads.length === 0 ? (
             <div className="py-20 text-center border-2 border-dashed rounded-[2.5rem] bg-slate-50/50">
-                <Package size={48} className="mx-auto text-slate-200 mb-4" />
                 <p className="text-slate-400 font-bold">لم تقم بنشر أي شحنات بعد</p>
             </div>
           ) : (
@@ -139,29 +118,21 @@ export default function ShipperDashboard() {
               <AnimatePresence mode='popLayout'>
                 {myLoads.map((load) => (
                   <motion.div key={load.id} layout initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }}>
-                    <Card className="rounded-[2rem] border-none shadow-sm hover:shadow-md transition-all overflow-hidden bg-white group">
+                    <Card className="rounded-[2rem] border-none shadow-sm bg-white overflow-hidden">
                       <CardContent className="p-0">
                         <div className="flex">
-                            {/* شريط الحالة الملون */}
                             <div className={`w-3 ${load.status === 'available' ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
-                            
                             <div className="flex-1 p-5">
                                 <div className="flex justify-between items-start mb-3">
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-2 font-black text-slate-800 text-lg">
-                                            {load.origin} 
-                                            <ChevronLeft size={16} className="text-slate-300" /> 
-                                            {load.destination}
+                                            {load.origin} <ChevronLeft size={16} className="text-slate-300" /> {load.destination}
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            <Badge className={load.status === 'available' ? 'bg-emerald-50 text-emerald-600 border-0' : 'bg-blue-50 text-blue-600 border-0'}>
-                                                {load.status === 'available' ? 'في انتظار ناقل' : 'جاري التوصيل'}
-                                            </Badge>
-                                            <span className="text-[10px] text-slate-400 font-bold">{new Date(load.created_at).toLocaleDateString('ar')}</span>
-                                        </div>
+                                        <Badge className={load.status === 'available' ? 'bg-emerald-50 text-emerald-600 border-0' : 'bg-blue-50 text-blue-600 border-0'}>
+                                            {load.status === 'available' ? 'في انتظار ناقل' : 'جاري التوصيل'}
+                                        </Badge>
                                     </div>
 
-                                    {/* زر الحذف للسلة */}
                                     {load.status === 'available' && (
                                         <AlertDialog>
                                             <AlertDialogTrigger asChild>
@@ -172,30 +143,22 @@ export default function ShipperDashboard() {
                                             <AlertDialogContent className="rounded-[2.5rem]">
                                                 <AlertDialogHeader>
                                                     <AlertDialogTitle className="text-xl font-black">حذف طلب الشحنة؟</AlertDialogTitle>
-                                                    <AlertDialogDescription className="font-medium">
-                                                        سيتم إزالة الشحنة من قائمة السائقين ولن يتمكن أحد من قبولها.
-                                                    </AlertDialogDescription>
+                                                    <AlertDialogDescription className="font-medium">سيتم إزالة الشحنة من قائمة السائقين نهائياً.</AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter className="gap-3 mt-4">
-                                                    <AlertDialogCancel className="rounded-2xl h-12 font-bold border-slate-200">إلغاء</AlertDialogCancel>
-                                                    <AlertDialogAction onClick={() => handleDelete(load.id)} className="rounded-2xl h-12 font-bold bg-rose-500 hover:bg-rose-600 text-white">تأكيد الحذف</AlertDialogAction>
+                                                    <AlertDialogCancel className="rounded-2xl h-12 font-bold">إلغاء</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => handleDelete(load.id)} className="rounded-2xl h-12 font-bold bg-rose-500 text-white">تأكيد الحذف</AlertDialogAction>
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
                                         </AlertDialog>
                                     )}
                                 </div>
-
                                 <div className="flex items-center justify-between pt-3 border-t border-slate-50">
                                     <div className="flex gap-4">
-                                        <div><p className="text-[10px] text-slate-400 font-bold uppercase">الوزن</p><p className="font-black text-slate-700">{load.weight} طن</p></div>
-                                        <div className="border-r border-slate-100 pr-4">
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase">السعر التقديري</p>
-                                            <p className="font-black text-emerald-600">{load.price} ر.س</p>
-                                        </div>
+                                        <div><p className="text-[10px] text-slate-400 font-bold">الوزن</p><p className="font-black text-slate-700">{load.weight} طن</p></div>
+                                        <div><p className="text-[10px] text-slate-400 font-bold">السعر</p><p className="font-black text-emerald-600">{load.price} ر.س</p></div>
                                     </div>
-                                    <Button variant="ghost" size="sm" className="text-primary font-black hover:bg-primary/5 rounded-xl px-4" onClick={() => navigate('/shipper/loads')}>
-                                        التفاصيل
-                                    </Button>
+                                    <Button variant="ghost" size="sm" className="text-primary font-black rounded-xl" onClick={() => navigate('/shipper/loads')}>التفاصيل</Button>
                                 </div>
                             </div>
                         </div>

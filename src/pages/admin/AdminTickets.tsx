@@ -1,57 +1,47 @@
 import { useEffect, useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { api } from '@/services/api';
 import AppLayout from '@/components/AppLayout';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { MessageSquare, User, Clock } from 'lucide-react';
 
 export default function AdminTickets() {
-  const { t } = useTranslation();
   const [tickets, setTickets] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.getTickets().then(data => setTickets(data || [])).catch(console.error).finally(() => setLoading(false));
+    api.getTickets().then(setTickets);
   }, []);
-
-  const statusColors: Record<string, string> = {
-    open: 'bg-secondary/10 text-secondary', in_progress: 'bg-primary/10 text-primary',
-    resolved: 'bg-accent/10 text-accent', closed: 'bg-muted text-muted-foreground',
-  };
 
   return (
     <AppLayout>
-      <div className="space-y-4">
-        <h2 className="text-xl font-bold">{t('support_tickets')}</h2>
-        {loading ? (
-          <div className="flex justify-center py-12"><Loader2 className="animate-spin text-primary" size={32} /></div>
-        ) : tickets.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">{t('no_data')}</div>
-        ) : (
-          <div className="rounded-xl border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>الموضوع</TableHead>
-                  <TableHead>الأولوية</TableHead>
-                  <TableHead>{t('status')}</TableHead>
-                  <TableHead>{t('date')}</TableHead>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-black italic uppercase italic tracking-widest"><MessageSquare className="inline ml-2 text-blue-600"/> Support Desk</h1>
+        <div className="bg-white rounded-[2.5rem] border shadow-2xl overflow-hidden">
+          <Table>
+            <TableHeader className="bg-slate-900">
+              <TableRow>
+                <TableHead className="text-slate-400 font-bold">المستخدم</TableHead>
+                <TableHead className="text-slate-400 font-bold">الموضوع</TableHead>
+                <TableHead className="text-slate-400 font-bold">الحالة</TableHead>
+                <TableHead className="text-slate-400 font-bold">التاريخ</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tickets.map(t => (
+                <TableRow key={t.id} className="h-20 hover:bg-slate-50 transition-colors">
+                  <TableCell className="font-bold flex items-center gap-2">
+                    <User size={14} className="text-blue-500" /> {t.profiles?.full_name}
+                  </TableCell>
+                  <TableCell className="font-bold text-slate-700">{t.subject}</TableCell>
+                  <TableCell><Badge className="bg-rose-500 rounded-full px-4 font-black">OPEN</Badge></TableCell>
+                  <TableCell className="text-slate-400 text-xs tabular-nums">
+                    {new Date(t.created_at).toLocaleDateString('ar-SA')}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tickets.map(ticket => (
-                  <TableRow key={ticket.id}>
-                    <TableCell className="font-medium">{ticket.subject}</TableCell>
-                    <TableCell><Badge variant="outline">{ticket.priority}</Badge></TableCell>
-                    <TableCell><Badge className={statusColors[ticket.status] || ''}>{ticket.status}</Badge></TableCell>
-                    <TableCell>{new Date(ticket.created_at).toLocaleDateString('ar')}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
     </AppLayout>
   );

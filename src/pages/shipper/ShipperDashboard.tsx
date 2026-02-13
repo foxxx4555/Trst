@@ -1,104 +1,175 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/services/api';
 import AppLayout from '@/components/AppLayout';
-import { Card, CardContent } from '@/components/ui/card';
+import StatCard from '@/components/StatCard';
+import { Package, CheckCircle, Plus, Search, MapPin, Loader2, ArrowRight } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Star, CheckCircle, Navigation, ShieldCheck, ArrowUpRight, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils'; // حل مشكلة ReferenceError
+
+import { supabase } from '@/integrations/supabase/client';
 
 export default function ShipperDashboard() {
+  const { t } = useTranslation();
   const { userProfile } = useAuth();
-  const [stats, setStats] = useState<any>(null);
-  const [pendingRating, setPendingRating] = useState<any[]>([]);
+  const navigate = useNavigate();
+  const [stats, setStats] = useState({ activeLoads: 0, completedTrips: 0 });
+  const [recentLoads, setRecentLoads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
+  const fetchDashboardData = async () => {
     if (!userProfile?.id) return;
     try {
-      const [s, loads] = await Promise.all([
-        api.getAdminStats(),
+      const [s, l] = await Promise.all([
+        api.getShipperStats(userProfile.id),
         api.getUserLoads(userProfile.id)
       ]);
       setStats(s);
-      // الشحنات التي اكتملت وتحتاج تقييم
-      setPendingRating(loads.filter((l: any) => l.status === 'completed'));
-    } catch (e) {
-      console.error(e);
+      setRecentLoads(l.slice(0, 3));
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { loadData(); }, [userProfile]);
+  useEffect(() => {
+    fetchDashboardData();
 
-  const handleRate = async (driverId: string, loadId: string, rating: number) => {
-    try {
-      await api.submitRating(driverId, loadId, rating, "تقييم من التاجر");
-      toast.success("شكراً لك! تم إرسال التقييم بنجاح.");
-      setPendingRating(prev => prev.filter(l => l.id !== loadId));
-    } catch (e) {
-      toast.error("فشل إرسال التقييم");
-    }
-  };
+    const channel = supabase
+      .channel('shipper-dashboard')
+      .on('postgres_changes', { event: '*', table: 'loads', schema: 'public' }, () => fetchDashboardData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userProfile]);
 
   return (
     <AppLayout>
-      <div className="space-y-10 pb-10">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-          <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tighter italic uppercase">Mission Control</h1>
-            <p className="text-slate-500 font-medium mt-1">أهلاً بك {userProfile?.full_name}، شحناتك تحت السيطرة.</p>
-          </div>
-          <Button onClick={() => window.location.href='/shipper/post'} className="bg-blue-600 hover:bg-blue-700 text-white rounded-2xl h-16 px-8 font-black text-lg shadow-xl shadow-blue-500/20 gap-3 transition-all active:scale-95">
-            نشر شحنة جديدة
+      <div className="space-y-10">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+            <h1 className="text-4xl font-black tracking-tight">{t('welcome')}، {userProfile?.full_name} ✨</h1>
+            <p className="text-muted-foreground font-medium text-lg mt-2">نظم شحناتك وراقب أعمالك بكل سهولة وذكاء</p>
+          </motion.div>
+
+          <Button className="rounded-2xl h-14 px-8 font-black text-lg bg-primary shadow-xl shadow-primary/20 hover:scale-[1.02] transition-transform" onClick={() => navigate('/shipper/post')}>
+            <Plus className="me-2" size={24} strokeWidth={3} /> {t('post_load')}
           </Button>
         </div>
 
-        {pendingRating.length > 0 && (
-          <div className="space-y-4 animate-in fade-in duration-700">
-            <h2 className="text-xl font-black text-blue-600 flex items-center gap-2 italic">
-               <Star size={22} className="fill-blue-600" /> تقييمات معلقة
-            </h2>
-            <div className="grid gap-4">
-              {pendingRating.map(load => (
-                <Card key={load.id} className="rounded-[2.5rem] border-2 border-blue-100 bg-white p-8 shadow-xl">
-                  <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                    <div className="text-right">
-                      <p className="text-lg font-black text-slate-800">وصلت شحنتك من {load.origin}</p>
-                      <p className="text-sm text-slate-400 font-bold">يرجى تقييم السائق: {load.profiles?.full_name || 'سائق معتمد'}</p>
-                    </div>
-                    <div className="flex gap-2">
-                       {[1, 2, 3, 4, 5].map(num => (
-                         <button key={num} onClick={() => handleRate(load.driver_id, load.id, num)} className="p-2 hover:scale-125 transition-all text-amber-400">
-                            <Star size={35} fill={num <= 4 ? "currentColor" : "none"} />
-                         </button>
-                       ))}
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <StatCard
+            title={t('active_loads')}
+            value={stats.activeLoads}
+            icon={<Package size={28} />}
+            color="primary"
+            trend={{ value: "4", isPositive: true }}
+          />
+          <StatCard
+            title={t('completed_trips')}
+            value={stats.completedTrips}
+            icon={<CheckCircle size={28} />}
+            color="accent"
+            trend={{ value: "10", isPositive: true }}
+          />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            { label: 'شحنات نشطة', value: stats?.activeLoads || 0, icon: <Navigation />, color: 'bg-blue-600' },
-            { label: 'تم توصيلها', value: stats?.completedTrips || 0, icon: <CheckCircle />, color: 'bg-emerald-500' },
-            { label: 'معدل الأمان', value: "100%", icon: <ShieldCheck />, color: 'bg-slate-900' }
-          ].map((s, i) => (
-            <Card key={i} className="rounded-[2.5rem] border-none p-8 bg-white shadow-sm relative overflow-hidden group">
-              <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg", s.color)}>
-                {s.icon}
+          <Card className="rounded-[2.5rem] bg-gradient-to-tr from-blue-600 to-indigo-700 text-white shadow-2xl border-none overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 blur-2xl group-hover:scale-150 transition-transform duration-700" />
+            <CardContent className="p-8 h-full flex flex-col justify-between relative z-10">
+              <div className="space-y-1">
+                <p className="text-sm font-bold opacity-60 uppercase tracking-widest">تتبع سريع</p>
+                <p className="text-xl font-black">ابحث عن شحنتك برقم البوليصة</p>
               </div>
-              <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">{s.label}</p>
-              <p className="text-4xl font-black text-slate-900 mt-1">{s.value}</p>
-              <ArrowUpRight className="absolute top-8 end-8 text-slate-100 group-hover:text-blue-500 transition-colors" />
-            </Card>
-          ))}
+              <div className="relative mt-4">
+                <Search className="absolute end-4 top-1/2 -translate-y-1/2 opacity-50" size={18} />
+                <input
+                  type="text"
+                  placeholder="رقم الشحنة..."
+                  className="w-full h-12 rounded-xl bg-white/10 border border-white/20 px-4 focus:outline-none focus:bg-white/20 transition-all font-bold placeholder:text-white/40"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <Card className="lg:col-span-2 rounded-[2.5rem] shadow-2xl border-none p-8">
+            <CardHeader className="px-0 pt-0 flex flex-row items-center justify-between space-y-0 pb-8">
+              <div>
+                <CardTitle className="text-2xl font-black">{t('my_shipments')}</CardTitle>
+                <CardDescription className="font-medium text-base mt-1">آخر الشحنات التي قمت بنشرها</CardDescription>
+              </div>
+              <Button variant="ghost" className="font-black text-primary hover:bg-primary/5 rounded-xl" onClick={() => navigate('/shipper/loads')}>
+                عرض الكل <ArrowRight className="ms-2" size={18} />
+              </Button>
+            </CardHeader>
+            <CardContent className="px-0">
+              <div className="space-y-4">
+                {loading ? (
+                  <div className="flex justify-center py-10"><Loader2 className="animate-spin text-primary" size={40} /></div>
+                ) : recentLoads.length > 0 ? (
+                  recentLoads.map((load) => (
+                    <div key={load.id} className="flex flex-col md:flex-row md:items-center justify-between p-6 rounded-[2rem] bg-muted/30 border-2 border-transparent hover:border-primary/20 hover:bg-white transition-all cursor-pointer group">
+                      <div className="flex items-center gap-5">
+                        <div className="w-14 h-14 rounded-2xl bg-white shadow-lg flex items-center justify-center text-primary transition-transform group-hover:rotate-6">
+                          <Package size={28} />
+                        </div>
+                        <div>
+                          <p className="font-black text-lg">{load.type || 'شحنة عامة'}</p>
+                          <div className="flex items-center gap-4 mt-1 text-sm font-bold text-muted-foreground">
+                            <span className="flex items-center gap-1"><MapPin size={14} className="text-primary" /> {load.origin}</span>
+                            <span className="text-xl">←</span>
+                            <span className="flex items-center gap-1"><MapPin size={14} className="text-accent" /> {load.destination}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-4 md:mt-0 flex items-center gap-6">
+                        <div className="text-end">
+                          <p className="font-black text-primary text-xl">{load.price} ر.س</p>
+                          <p className="text-xs font-bold text-muted-foreground uppercase">{load.status === 'available' ? 'في انتظار ناقل' : 'جاري التنفيذ'}</p>
+                        </div>
+                        <div className={cn(
+                          "w-3 h-3 rounded-full animate-pulse",
+                          load.status === 'available' ? "bg-amber-500" : "bg-emerald-500"
+                        )} />
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 bg-muted/20 rounded-[2rem] border-2 border-dashed border-border">
+                    <Package className="mx-auto text-muted-foreground/30 mb-4" size={48} />
+                    <p className="font-bold text-muted-foreground">لا توجد شحنات حالية</p>
+                    <Button variant="link" onClick={() => navigate('/shipper/post')} className="font-black mt-2">ابدأ بنشر أول شحنة الآن</Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[2.5rem] shadow-2xl border-none bg-accent text-white p-8 relative overflow-hidden">
+            <div className="absolute bottom-0 left-0 w-full h-1/2 bg-white/5 skew-y-12 translate-y-20" />
+            <CardHeader className="px-0 pt-0">
+              <CardTitle className="text-2xl font-black">أضف شركاء جدد</CardTitle>
+            </CardHeader>
+            <CardContent className="px-0 relative z-10">
+              <p className="font-medium text-white/80 leading-relaxed mb-8 text-lg">أضف مستلمين دائمين لمنتجاتك لتسريع عملية حجز الشحنات في المرات القادمة</p>
+              <div className="space-y-4">
+                <Button className="w-full h-14 rounded-2xl bg-white text-accent hover:bg-white/90 font-black text-lg shadow-xl shadow-accent/20">
+                  + إضافة مستلم جديد
+                </Button>
+                <Button variant="ghost" className="w-full h-14 rounded-2xl border-2 border-white/20 text-white hover:bg-white/10 font-black">
+                  إدارة جهات الاتصال
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </AppLayout>

@@ -1,22 +1,25 @@
-import { ReactNode, useState, useMemo } from 'react';
+import { ReactNode, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { 
   LayoutDashboard, Package, Truck, Settings, LogOut, 
-  Plus, Globe, MapPin, User, Users, ShieldAlert, BarChart3, ChevronLeft
+  Plus, Globe, MapPin, User, Users, BarChart3, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge'; // التأكد من استيراد البادج
 import { cn } from '@/lib/utils';
 import NotificationCenter from './NotificationCenter';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { currentRole, logout, userProfile } = useAuth();
+  const { currentRole, logout, userProfile, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // 1. تحديد القائمة بناءً على الـ Role (مدير، شاحن، سائق)
+  // 1. تحديد القائمة بناءً على الدور (Admin, Shipper, Driver)
   const navItems = useMemo(() => {
+    if (!currentRole) return [];
+    
     switch (currentRole) {
       case 'admin':
         return [
@@ -45,18 +48,30 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     }
   }, [currentRole]);
 
+  // حماية من الشاشة البيضاء: لو الداتا لسه بتحمل اعرض لودر فخم
+  if (loading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-[#0f172a]">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-500 mx-auto" />
+          <p className="text-white/50 font-bold tracking-widest text-xs uppercase">SAS Global Logistics</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-[#f8fafc]">
       
-      {/* --- 1. Sidebar للكمبيوتر (Desktop) --- */}
-      <aside className="hidden lg:flex fixed lg:static inset-y-0 start-0 z-50 w-72 bg-[#0f172a] text-white flex-col transition-all duration-500 shadow-2xl">
+      {/* --- Sidebar Desktop --- */}
+      <aside className="hidden lg:flex fixed lg:static inset-y-0 start-0 z-50 w-72 bg-[#0f172a] text-white flex-col shadow-2xl">
         <div className="p-8 mb-6">
           <div className="flex items-center gap-3 group cursor-pointer" onClick={() => navigate('/')}>
-            <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/40 group-hover:rotate-12 transition-transform">
+            <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/40">
               <Truck size={24} className="text-white" />
             </div>
             <div>
-              <h1 className="font-black text-2xl tracking-tighter italic">SAS<span className="text-blue-400">.</span></h1>
+              <h1 className="font-black text-2xl tracking-tighter italic text-white">SAS<span className="text-blue-400">.</span></h1>
               <p className="text-[8px] font-bold text-white/30 uppercase tracking-[0.3em]">Logistics Global</p>
             </div>
           </div>
@@ -68,7 +83,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             return (
               <Link key={item.path} to={item.path}
                 className={cn("flex items-center gap-4 px-5 py-4 rounded-[1.25rem] text-sm font-bold transition-all duration-300",
-                  isActive ? "bg-blue-600 text-white shadow-xl shadow-blue-600/20" : "text-white/40 hover:text-white hover:bg-white/5"
+                  isActive ? "bg-blue-600 text-white shadow-xl" : "text-white/40 hover:text-white hover:bg-white/5"
                 )}>
                 {item.icon}
                 {item.label}
@@ -78,45 +93,32 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="p-6 border-t border-white/5 space-y-4">
-          <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-             <p className="text-[10px] text-white/30 font-bold uppercase mb-2">الدور الحالي</p>
-             <Badge className={cn("rounded-lg", currentRole === 'admin' ? "bg-rose-500" : "bg-blue-500")}>
-                {currentRole === 'admin' ? 'مدير النظام' : currentRole === 'shipper' ? 'تاجر / شاحن' : 'ناقل / سائق'}
-             </Badge>
-          </div>
           <Button variant="ghost" className="w-full justify-start gap-4 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-2xl h-14 font-black" onClick={logout}>
             <LogOut size={20} /> تسجيل الخروج
           </Button>
         </div>
       </aside>
 
-      {/* --- 2. محتوى الصفحة الرئيسي --- */}
+      {/* --- Main Content --- */}
       <main className="flex-1 flex flex-col min-w-0 pb-24 lg:pb-0">
-        {/* Header ثابت بالأعلى */}
-        <header className="h-20 flex items-center justify-between px-6 bg-white/70 backdrop-blur-md border-b border-slate-200/50 sticky top-0 z-40">
+        <header className="h-20 flex items-center justify-between px-6 bg-white/70 backdrop-blur-md border-b sticky top-0 z-40">
           <div className="flex items-center gap-3">
-             <div className="lg:hidden w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-md">
+             <div className="lg:hidden w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center">
                 <Truck size={20} className="text-white" />
              </div>
-             <div>
-                <h2 className="font-black text-slate-800 text-lg lg:text-xl truncate leading-none">
-                    {navItems.find(i => i.path === location.pathname)?.label || 'الرئيسية'}
-                </h2>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1 lg:hidden">
-                    {currentRole === 'admin' ? 'لوحة المدير' : 'تطبيق SAS'}
-                </p>
-             </div>
+             <h2 className="font-black text-slate-800 text-lg lg:text-xl truncate">
+                {navItems.find(i => i.path === location.pathname)?.label || 'الرئيسية'}
+             </h2>
           </div>
 
           <div className="flex items-center gap-3">
             <NotificationCenter />
             <div className="w-10 h-10 rounded-full bg-slate-100 border-2 border-white shadow-sm flex items-center justify-center overflow-hidden">
-                {userProfile?.avatar_url ? <img src={userProfile.avatar_url} className="w-full h-full object-cover" /> : <User size={20} className="text-slate-400" />}
+                <User size={20} className="text-slate-400" />
             </div>
           </div>
         </header>
 
-        {/* عرض الصفحة الفعلية */}
         <div className="p-4 md:p-8 max-w-[1600px] mx-auto w-full">
           <AnimatePresence mode="wait">
             <motion.div
@@ -124,7 +126,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.2 }}
             >
               {children}
             </motion.div>
@@ -132,39 +134,32 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </main>
 
-      {/* --- 3. Bottom Navigation Bar الذكي (للموبايل فقط) --- */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-2xl border-t border-slate-100 px-2 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+      {/* --- Bottom Navigation (Mobile) --- */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-2xl border-t px-2 pb-safe shadow-2xl">
         <div className="flex justify-around items-center h-20">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
-              <Link 
-                key={item.path} 
-                to={item.path}
+              <Link key={item.path} to={item.path}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1 w-full h-full transition-all duration-300 relative",
-                  isActive ? "text-blue-600 scale-110" : "text-slate-400"
+                  "flex flex-col items-center justify-center gap-1 w-full h-full transition-all relative",
+                  isActive ? "text-blue-600" : "text-slate-400"
                 )}
               >
-                {isActive && (
-                    <motion.div 
-                        layoutId="nav-glow" 
-                        className="absolute -top-1 w-12 h-1 bg-blue-600 rounded-full shadow-[0_0_10px_rgba(37,99,235,0.5)]" 
-                    />
-                )}
-                <div className={cn(
-                    "p-1.5 rounded-xl transition-all",
-                    isActive ? "bg-blue-50/50 text-blue-600" : ""
-                )}>
+                <div className={cn("p-1.5 rounded-xl transition-all", isActive ? "bg-blue-50" : "")}>
                     {item.icon}
                 </div>
-                <span className="text-[9px] font-black tracking-tighter">{item.label}</span>
+                <span className="text-[9px] font-black">{item.label}</span>
               </Link>
             );
           })}
+          {/* زر الخروج في الموبايل لسهولة الوصول */}
+          <button onClick={logout} className="flex flex-col items-center justify-center gap-1 w-full h-full text-rose-400">
+             <LogOut size={20} />
+             <span className="text-[9px] font-black">خروج</span>
+          </button>
         </div>
       </nav>
-
     </div>
   );
 }

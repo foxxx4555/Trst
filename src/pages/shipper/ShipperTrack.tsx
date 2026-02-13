@@ -1,10 +1,10 @@
-import React from 'react';
-import { Badge } from 'somewhere'; // Ensure the correct path to Badge
+import Badge from '@/components/ui/badge';
 
 const ShipperTrack = () => {
     return (
         <div>
-            <Badge count={5} />
+            <h1>Shipper Track</h1>
+            <Badge />
         </div>
     );
 };

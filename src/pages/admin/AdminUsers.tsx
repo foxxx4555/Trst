@@ -4,119 +4,64 @@ import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Mail, Phone, User, Search, RefreshCw } from 'lucide-react';
+import { Loader2, Mail, Phone, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 export default function AdminUsers() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [search, setSearch] = useState('');
 
-  // دالة جلب البيانات مع حماية من الفشل
   const fetchUsers = useCallback(async () => {
     try {
       const data = await api.getAllUsers();
       if (data) setUsers(data);
-    } catch (err) {
-      console.error("فشل في جلب المستخدمين:", err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
     fetchUsers();
-
-    // استماع للتغييرات بدون إعادة تحميل الصفحة بالكامل (تحسين الأداء)
-    const channel = supabase.channel('admin_users_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        fetchUsers(); // تحديث اللستة فقط عند حدوث تغيير حقيقي
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    const ch = supabase.channel('admin-realtime').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchUsers).subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, [fetchUsers]);
 
-  // فلاتر البحث لسرعة الوصول
-  const filteredUsers = users.filter(u => 
-    (u.full_name?.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (u.email?.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filtered = users.filter(u => u.full_name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <h2 className="text-2xl font-black text-slate-800 tracking-tight">إدارة الكوادر</h2>
-            <div className="relative w-full md:w-72">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <Input 
-                    placeholder="بحث باسم المستخدم..." 
-                    className="pr-10 rounded-2xl border-slate-200 focus:ring-blue-500 h-11"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
-            </div>
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <h2 className="text-2xl font-black text-slate-900 tracking-tighter italic uppercase">User Directory</h2>
+            <div className="relative w-full md:w-80"><Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" size={18} /><Input placeholder="بحث بالاسم أو الإيميل..." className="pr-10 rounded-2xl h-12 shadow-sm" value={search} onChange={e => setSearch(e.target.value)} /></div>
         </div>
 
-        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl overflow-hidden">
           <Table>
-            <TableHeader className="bg-slate-50">
-              <TableRow className="border-slate-100 hover:bg-transparent">
-                <TableHead className="text-right font-black text-slate-500 py-5">المستخدم</TableHead>
-                <TableHead className="text-right font-black text-slate-500">الصلاحية</TableHead>
-                <TableHead className="text-right font-black text-slate-500">التواصل</TableHead>
+            <TableHeader className="bg-slate-900">
+              <TableRow className="hover:bg-transparent border-none">
+                <TableHead className="w-[35%] text-right font-black text-slate-400 py-6 pr-8">المستخدم</TableHead>
+                <TableHead className="w-[20%] text-right font-black text-slate-400">الصلاحية</TableHead>
+                <TableHead className="w-[30%] text-right font-black text-slate-400">التواصل</TableHead>
+                <TableHead className="w-[15%] text-right font-black text-slate-400">التاريخ</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                // Skeleton Loading (أفضل بكتير من لودر واحد بيخنق)
-                [1,2,3,4,5].map(i => (
-                  <TableRow key={i} className="animate-pulse">
-                    <TableCell><div className="h-10 bg-slate-100 rounded-xl w-32"></div></TableCell>
-                    <TableCell><div className="h-6 bg-slate-50 rounded-lg w-20"></div></TableCell>
-                    <TableCell><div className="h-6 bg-slate-50 rounded-lg w-40"></div></TableCell>
-                  </TableRow>
-                ))
-              ) : filteredUsers.length > 0 ? (
-                filteredUsers.map((user) => {
-                  // حماية: التأكد من الدور حتى لو مش موجود في الداتا
-                  const role = user.user_roles?.[0]?.role || 'shipper';
-                  return (
-                    <TableRow key={user.id} className="border-slate-50 hover:bg-blue-50/30 transition-all group">
-                      <TableCell className="py-5">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-black text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                {user.full_name?.[0] || 'U'}
-                            </div>
-                            <div>
-                                <p className="font-bold text-slate-700 leading-none mb-1">{user.full_name || 'مستخدم جديد'}</p>
-                                <p className="text-[10px] text-slate-400 font-bold">ID: {user.id?.slice(0,8)}</p>
-                            </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={cn(
-                            "rounded-lg font-black text-[10px] uppercase px-3 py-1",
-                            role === 'admin' ? 'bg-rose-500' : role === 'driver' ? 'bg-blue-500' : 'bg-emerald-500'
-                        )}>
-                          {role === 'admin' ? 'مدير' : role === 'driver' ? 'ناقل' : 'تاجر'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-[11px] font-bold text-slate-500 space-y-1">
-                            <div className="flex items-center gap-2"><Mail size={12} className="text-slate-300"/> {user.email || 'N/A'}</div>
-                            <div className="flex items-center gap-2"><Phone size={12} className="text-slate-300"/> {user.phone || '---'}</div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={3} className="h-40 text-center text-slate-400 font-bold italic">لا يوجد نتائج تطابق بحثك</TableCell>
+                <TableRow><TableCell colSpan={4} className="h-64 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40} /></TableCell></TableRow>
+              ) : filtered.map((u) => (
+                <TableRow key={u.id} className="border-slate-50 hover:bg-slate-50 transition-all h-24">
+                  <TableCell className="pr-8">
+                    <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center font-black text-blue-600 border border-slate-200 uppercase">{u.full_name?.[0] || 'U'}</div>
+                        <div><p className="font-black text-slate-800 text-sm leading-none mb-1">{u.full_name || 'مستخدم جديد'}</p><p className="text-[10px] text-slate-400 font-bold uppercase">ID: {u.id.slice(0,8)}</p></div>
+                    </div>
+                  </TableCell>
+                  <TableCell><Badge className={cn("rounded-lg font-black text-[9px] uppercase px-3 py-1", u.user_roles?.[0]?.role === 'admin' ? 'bg-rose-500' : u.user_roles?.[0]?.role === 'driver' ? 'bg-blue-600' : 'bg-emerald-500')}>{u.user_roles?.[0]?.role || 'shipper'}</Badge></TableCell>
+                  <TableCell><div className="space-y-1"><p className="flex items-center gap-2 text-[11px] font-bold text-slate-600"><Mail size={12} className="text-slate-300"/> {u.email}</p><p className="flex items-center gap-2 text-[11px] font-bold text-slate-600"><Phone size={12} className="text-slate-300"/> {u.phone || '---'}</p></div></TableCell>
+                  <TableCell className="text-[11px] font-black text-slate-400 tabular-nums">{new Date(u.created_at).toLocaleDateString('ar-SA')}</TableCell>
                 </TableRow>
-              )}
+              ))}
             </TableBody>
           </Table>
         </div>

@@ -10,17 +10,10 @@ export function useAuth() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // مراقبة تغييرات حالة المصادقة
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      
-      // إذا انتهت الجلسة أو حدث خطأ في التحديث (Refresh Token Error)
       if (event === 'SIGNED_OUT' || !session) {
         reset();
         setLoading(false);
-        // التوجيه للوجين فقط إذا لم نكن في صفحات عامة
-        if (window.location.pathname.includes('/dashboard') || window.location.pathname.includes('/account')) {
-            navigate('/login');
-        }
         return;
       }
 
@@ -29,32 +22,15 @@ export function useAuth() {
           const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
           const { data: roleData } = await supabase.from('user_roles').select('role').eq('user_id', session.user.id).maybeSingle();
 
-          if (profile) setUserProfile(profile);
-          if (roleData) setCurrentRole(roleData.role as UserRole);
-        } catch (error) {
-          console.error("Error fetching user data:", error);
+          // حتى لو لم يجد بروفايل (بسبب المسح)، نضع بيانات افتراضية لكي يفتح التطبيق
+          setUserProfile(profile || { id: session.user.id, full_name: 'مستخدم جديد' });
+          setCurrentRole((roleData?.role as UserRole) || 'shipper');
+        } catch (e) {
+          console.error("Auth fetch error", e);
         }
       }
       setLoading(false);
     });
-
-    // تحقق أولي من الجلسة عند فتح التطبيق
-    const checkSession = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error || !session) {
-            // إذا وجد خطأ في الجلسة (مثل خطأ Refresh Token)، امسح كل شيء
-            await supabase.auth.signOut();
-            reset();
-        }
-      } catch (err) {
-        reset();
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkSession();
 
     return () => subscription.unsubscribe();
   }, []);
@@ -65,5 +41,5 @@ export function useAuth() {
     navigate('/login');
   };
 
-  return { userProfile, loading, logout, isAuthenticated: !!userProfile };
+  return { userProfile, currentRole: useAppStore.getState().currentRole, loading, logout, isAuthenticated: !!userProfile };
 }

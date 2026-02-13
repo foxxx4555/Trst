@@ -422,3 +422,298 @@ export default function DriverHistory() {
                       <SelectItem value="dangerous">{t('dangerous')}</SelectItem>
                     </SelectContent>
                  
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t('region')}</Label>
+                  <Input
+                    placeholder={t('search_by_region')}
+                    value={filterOptions.region}
+                    onChange={(e) => setFilterOptions({...filterOptions, region: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-6">
+                <Button onClick={applyFilters}>{t('apply_filters')}</Button>
+                <Button variant="ghost" onClick={resetFilters}>{t('reset_filters')}</Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* قسم البيانات المالية */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">{t('total_earnings')}</p>
+                  <p className="text-2xl font-bold">
+                    {filteredLoads.reduce((sum, load) => sum + parseFloat(load.price), 0)} ر.س
+                  </p>
+                </div>
+                <CreditCard className="h-8 w-8 text-blue-500" />
+              </div>
+              <Separator className="my-4" />
+              <div className="flex justify-between text-sm">
+                <span>{t('paid')}: {filteredLoads.filter(l => l.payment_status === 'paid').length} {t('loads')}</span>
+                <span>{t('pending')}: {filteredLoads.filter(l => l.payment_status === 'pending').length} {t('loads')}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">{t('total_loads')}</p>
+                  <p className="text-2xl font-bold">{filteredLoads.length}</p>
+                </div>
+                <ClipboardList className="h-8 w-8 text-green-500" />
+              </div>
+              <Separator className="my-4" />
+              <div className="flex justify-between text-sm">
+                <span>{t('completed')}: {filteredLoads.filter(l => l.status === 'completed').length}</span>
+                <span>{t('in_progress')}: {filteredLoads.filter(l => l.status === 'in_progress').length}</span>
+                <span>{t('cancelled')}: {filteredLoads.filter(l => l.status === 'cancelled').length}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">{t('average_income')}</p>
+                  <p className="text-2xl font-bold">
+                    {filteredLoads.length > 0 
+                      ? (filteredLoads.reduce((sum, load) => sum + parseFloat(load.price), 0) / filteredLoads.length).toFixed(2)
+                      : '0'
+                    } ر.س
+                  </p>
+                </div>
+                <DollarSign className="h-8 w-8 text-green-500" />
+              </div>
+              <Separator className="my-4" />
+              <div className="flex justify-between text-sm">
+                <span>{t('highest_earning')}: {Math.max(...filteredLoads.map(l => parseFloat(l.price)), 0)} ر.س</span>
+                <span>{t('lowest_earning')}: {Math.min(...filteredLoads.map(l => parseFloat(l.price)), 0)} ر.س</span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* الرسم البياني */}
+        <Card className="mb-6">
+          <CardContent className="p-6">
+            <h3 className="text-lg font-bold mb-4">{t('loads_chart')}</h3>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="completed" fill="#22c55e" />
+                  <Bar dataKey="in_progress" fill="#3b82f6" />
+                  <Bar dataKey="cancelled" fill="#ef4444" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* تفاصيل الشحنات */}
+        <div className="mb-8">
+          <h3 className="text-xl font-bold mb-4">{t('my_loads')}</h3>
+          
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin mr-2" />
+              <span>{t('loading')}</span>
+            </div>
+          ) : filteredLoads.length === 0 ? (
+            <div className="text-center py-12">
+              <AlertCircle className="h-12 w-12 mx-auto text-amber-500 mb-4" />
+              <h3 className="text-lg font-medium">{t('no_loads_found')}</h3>
+              <p className="text-muted-foreground">{t('no_loads_desc')}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredLoads.map((load) => (
+                <div key={load.id} className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+                  <div className="bg-gray-50 p-3 border-b">
+                    <div className="flex justify-between items-center">
+                      <Badge variant={
+                        load.status === 'completed' ? 'default' :
+                        load.status === 'in_progress' ? 'secondary' : 'destructive'
+                      }>
+                        {t(load.status)}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(load.created_at).toLocaleDateString('ar-EG')}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="p-4">
+                    <h4 className="font-bold text-lg mb-2">{load.origin} → {load.destination}</h4>
+                    
+                    <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">{t('weight')}:</span> {load.weight} طن
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">{t('type')}:</span> {t(load.load_type || 'general')}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">{t('price')}:</span> {load.price} ر.س
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">{t('payment_status')}:</span> {t(load.payment_status || 'pending')}
+                      </div>
+                    </div>
+
+                    {load.documents && load.documents.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-sm font-medium mb-2">{t('documents')}:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {load.documents.map(doc => (
+                            <button
+                              key={doc.id}
+                              onClick={() => downloadDocument(doc.url, doc.name)}
+                              className="flex items-center text-sm bg-blue-50 text-blue-600 px-2 py-1 rounded"
+                            >
+                              <FileText className="h-3 w-3 mr-1" />
+                              {doc.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between mt-4">
+                      <Button variant="ghost" onClick={() => markLoadAsCompleted(load.id)}>
+                        {t('mark_as_completed')}
+                      </Button>
+                      <Button onClick={() => setSelectedLoad(load)}>
+                        {t('view_details')}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* نافذة تفاصيل الحمولة */}
+        <Dialog open={!!selectedLoad} onOpenChange={() => setSelectedLoad(null)}>
+          <DialogContent className="max-w-2xl">
+            {selectedLoad && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{selectedLoad.origin} → {selectedLoad.destination}</DialogTitle>
+                  <DialogDescription>
+                    {t('load_created_on')} {new Date(selectedLoad.created_at).toLocaleDateString('ar-EG')}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-4">
+                  <div>
+                    <h4 className="font-medium mb-2">{t('load_details')}</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{t('weight')}:</span>
+                        <span>{selectedLoad.weight} طن</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{t('type')}:</span>
+                        <span>{t(selectedLoad.load_type || 'general')}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{t('price')}:</span>
+                        <span className="font-bold">{selectedLoad.price} ر.س</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{t('payment_status')}:</span>
+                        <span>{t(selectedLoad.payment_status || 'pending')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-medium mb-2">{t('customer_info')}</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{t('name')}:</span>
+                        <span>{selectedLoad.customer_info?.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{t('phone')}:</span>
+                        <span>{selectedLoad.customer_info?.phone}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{t('email')}:</span>
+                        <span>{selectedLoad.customer_info?.email}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedLoad.origin_coords && selectedLoad.destination_coords && (
+                  <div className="h-[250px] rounded-lg overflow-hidden border mt-4">
+                    <MapContainer center={[(selectedLoad.origin_coords.lat + selectedLoad.destination_coords.lat)/2, (selectedLoad.origin_coords.lng + selectedLoad.destination_coords.lng)/2]} zoom={8}>
+                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      <Marker position={[selectedLoad.origin_coords.lat, selectedLoad.origin_coords.lng]}>
+                        <Popup>{t('origin')}</Popup>
+                      </Marker>
+                      <Marker position={[selectedLoad.destination_coords.lat, selectedLoad.destination_coords.lng]}>
+                        <Popup>{t('destination')}</Popup>
+                      </Marker>
+                      <Polyline positions={[
+                        [selectedLoad.origin_coords.lat, selectedLoad.origin_coords.lng],
+                        [selectedLoad.destination_coords.lat, selectedLoad.destination_coords.lng]
+                      ]} color="blue" />
+                    </MapContainer>
+                  </div>
+                )}
+
+                {selectedLoad.documents && selectedLoad.documents.length > 0 && (
+                  <div className="mt-6">
+                    <h4 className="font-medium mb-2">{t('attachments')}</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedLoad.documents.map(doc => (
+                        <button
+                          key={doc.id}
+                          onClick={() => downloadDocument(doc.url, doc.name)}
+                          className="flex items-center bg-gray-50 px-3 py-1 rounded-md text-sm"
+                        >
+                          <FileText className="h-4 w-4 mr-1" />
+                          {doc.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2 mt-6">
+                  <Button variant="ghost" onClick={() => setSelectedLoad(null)}>
+                    {t('close')}
+                  </Button>
+                  {selectedLoad.status === 'in_progress' && (
+                    <Button onClick={() => markLoadAsCompleted(selectedLoad.id)}>
+                      {t('mark_as_completed')}
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </AppLayout>
+  );
+}

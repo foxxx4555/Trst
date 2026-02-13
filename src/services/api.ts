@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { UserProfile, Load, AdminStats, UserRole } from '@/types';
 
-export const api = {
+export const api = {      
   // --- الإشعارات ---
   async sendNotification(userId: string, title: string, message: string) {
     await supabase.from('notifications').insert([{
